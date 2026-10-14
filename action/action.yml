@@ -1,0 +1,46 @@
+name: AgentMoat CI Gate
+description: Gate AI-agent workflows — scan the files your agent will read (issue templates, AGENTS.md, CLAUDE.md, .cursorrules) for prompt-injection payload signatures before an agent ingests them.
+branding:
+  icon: shield
+  color: red
+
+inputs:
+  fail-on-detect:
+    description: Fail the job when an injection signature is detected (default true)
+    required: false
+    default: "true"
+  scan-paths:
+    description: Space-separated extra paths/files to scan for payload patterns
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: AgentMoat scan
+      shell: bash
+      run: |
+        set -euo pipefail
+        MOAT_BIN="${{ github.action_path }}/bin/moat.js"
+        echo "== AgentMoat: scanning agent-ingested files for injection payloads =="
+        FOUND=0
+        SCAN_TARGETS=".github/ISSUE_TEMPLATE .github/PULL_REQUEST_TEMPLATE .cursorrules .cursor AGENTS.md CLAUDE.md"
+        for p in $SCAN_TARGETS ${{ inputs.scan-paths }}; do
+          [ -e "$p" ] || continue
+          while IFS= read -r -d '' f; do
+            # exit codes: 0=allow 10=confirm 20=block; anything but 0 means "detected"
+            set +e
+            node "$MOAT_BIN" check --tool Scan --command "" --context "$(cat "$f")" --json > /tmp/moat-out.json 2>/dev/null
+            RC=$?
+            set -e
+            if [ "$RC" != "0" ]; then
+              echo "::warning file=$f::AgentMoat: injection signature detected (exit $RC): $(cat /tmp/moat-out.json)"
+              FOUND=1
+            fi
+          done < <(find "$p" -type f -print0 2>/dev/null)
+        done
+        echo "== AgentMoat: scan complete (detections=$FOUND) =="
+        if [ "$FOUND" = "1" ] && [ "${{ inputs.fail-on-detect }}" = "true" ]; then
+          echo "::error::AgentMoat: prompt-injection signatures found in files your agent will read. Review the warnings above before letting an agent ingest them."
+          exit 1
+        fi

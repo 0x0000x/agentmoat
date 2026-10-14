@@ -246,7 +246,6 @@ function main(argv) {
     // run argv[1:] under policy; used by the moat-shell wrapper
     const command = argv.slice(1).join(' ');
     const res = scanToolCall({ tool: 'Bash', command }, policy);
-    if (jsonOut(argv)) { /* not typical */ }
     if (res.verdict === 'block') {
       process.stderr.write(`agentmoat: BLOCKED — ${res.reason}\ncommand: ${command}\n`);
       auditLog({ kind: 'shell-block', ...res }, policy);
@@ -302,29 +301,37 @@ function main(argv) {
  * ------------------------------------------------------------------ */
 
 function hookCommand(args, policy) {
-  const action = args[0]; // 'claude-code' | 'claude-code --remove'
   const removing = args.includes('--remove');
   const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
   if (!fs.existsSync(path.dirname(settingsPath))) fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
   let settings = {};
   try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch { settings = {}; }
+  settings.hooks = settings.hooks || {};
+
+  const isOurs = entry => entry && Array.isArray(entry.hooks)
+    && entry.hooks.some(h => typeof h.command === 'string' && h.command.includes('agentmoat'));
 
   if (removing) {
-    if (settings.hooks && settings.hooks.PreToolUse) {
-      delete settings.hooks.PreToolUse;
-      if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
-    }
+    const pre = settings.hooks.PreToolUse || [];
+    const kept = pre.filter(e => !isOurs(e));
+    if (kept.length) settings.hooks.PreToolUse = kept;
+    else delete settings.hooks.PreToolUse;
+    if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
     console.log(`agentmoat: hook removed from ${settingsPath}`);
     return 0;
   }
 
   const hookCmd = `node ${require.resolve('../bin/moat.js')} hook-run`;
-  settings.hooks = settings.hooks || {};
-  settings.hooks.PreToolUse = [{ matcher: 'Bash|Write|Edit', hooks: [{ type: 'command', command: hookCmd }] }];
+  const pre = Array.isArray(settings.hooks.PreToolUse) ? settings.hooks.PreToolUse : [];
+  const withoutOurs = pre.filter(e => !isOurs(e));
+  withoutOurs.push({ matcher: 'Bash|Write|Edit', hooks: [{ type: 'command', command: hookCmd }] });
+  settings.hooks.PreToolUse = withoutOurs;
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  const others = withoutOurs.length - 1;
   console.log(`agentmoat: PreToolUse hook installed in ${settingsPath}`);
   console.log(`matcher: Bash|Write|Edit  — every tool call now passes the moat`);
+  if (others > 0) console.log(`(preserved ${others} existing PreToolUse hook${others > 1 ? 's' : ''})`);
   return 0;
 }
 

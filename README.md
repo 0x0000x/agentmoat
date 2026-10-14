@@ -62,6 +62,14 @@ moat-shell git push --force origin main
 
 Point your agent's bash tool at `moat-shell` (or alias `bash=moat-shell` in the agent's environment) and it inherits the same verdicts.
 
+**CI / GitHub Actions** — gate the files your agent reads before it reads them:
+
+```yaml
+- uses: 0x0000x/agentmoat/action@main   # scans issue/PR templates, AGENTS.md, CLAUDE.md, .cursorrules
+```
+
+The Action scans agent-ingested files for prompt-injection payload signatures and fails the job (or warns) before an AI-agent workflow — `claude-code-action`, Copilot Agent, Codex in CI — ingests them. This is the CI-side defense for the exact attack class that caused [Clinejection](https://labs.cloudsecurityalliance.org/research/csa-research-note-claude-code-github-action-prompt-injection/) and [Comment-and-Control](https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/).
+
 ## Try it in 30 seconds
 
 ```bash

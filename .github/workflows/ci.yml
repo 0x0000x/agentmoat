@@ -1,0 +1,58 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Attack corpus
+        run: node bin/moat.js test
+      - name: CLI contract
+        run: |
+          check() { node bin/moat.js check --command "$1" --json; }
+          check "cat /proc/self/environ"; [ $? -eq 20 ] || exit 1
+          check "sudo rm -rf /x"; [ $? -eq 10 ] || exit 1
+          check "ls"; [ $? -eq 0 ] || exit 1
+      - name: Hook protocol
+        run: |
+          OUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"cat /proc/self/environ"}}' | node bin/moat.js hook-run)
+          echo "$OUT" | grep -q '"decision":"deny"'
+          OUT2=$(echo '{"tool_name":"Bash","tool_input":{"command":"git push --force upstream main"}}' | node bin/moat.js hook-run)
+          echo "$OUT2" | grep -q '"decision":"ask"'
+          OUT3=$(echo '{"tool_name":"Bash","tool_input":{"command":"ls src/"}}' | node bin/moat.js hook-run)
+          [ -z "$OUT3" ]
+      - name: Moat-shell wrapper
+        run: |
+          node bin/moat-shell.js cat /proc/self/environ 2>/tmp/err.txt; RC=$?
+          [ "$RC" -eq 20 ] && grep -q "BLOCKED" /tmp/err.txt
+          node bin/moat-shell.js echo wrapper-ok
+      - name: Composite action smoke test
+        run: |
+          mkdir -p /tmp/selftest && cp -r . /tmp/selftest/repo
+          mkdir -p /tmp/selftest/repo/.github/ISSUE_TEMPLATE
+          printf 'Good template.\n' > /tmp/selftest/repo/.github/ISSUE_TEMPLATE/bug_report.md
+          cd /tmp/selftest/repo
+          node bin/moat.js check --tool Scan --command "" --context "$(cat .github/ISSUE_TEMPLATE/bug_report.md)" --json
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax
+        run: |
+          node --check bin/moat.js
+          node --check bin/moat-shell.js
+          node -e "JSON.parse(require('fs').readFileSync('package.json'))"

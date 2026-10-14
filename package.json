@@ -15,7 +15,7 @@
     "agentmoat": "bin/moat.js",
     "moat-shell": "bin/moat-shell.js"
   },
-  "files": ["bin/", "policy/", "README.md", "LICENSE"],
+  "files": ["bin/", "action/", "README.md", "LICENSE"],
   "scripts": {
     "test": "node bin/moat.js test"
   }
