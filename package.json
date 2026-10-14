@@ -1,0 +1,22 @@
+{
+  "name": "agentmoat",
+  "version": "0.1.0",
+  "description": "A moat around your AI coding agent: blocks prompt-injection-driven shell, file and credential actions at the tool boundary, with a full audit trail.",
+  "license": "MIT",
+  "repository": "github:0x0000x/agentmoat",
+  "homepage": "https://github.com/0x0000x/agentmoat",
+  "bugs": "https://github.com/0x0000x/agentmoat/issues",
+  "keywords": [
+    "ai-agent", "agent-security", "prompt-injection", "claude-code", "codex",
+    "firewall", "security", "tool-call", "guardrail", "supply-chain", "mcp"
+  ],
+  "engines": { "node": ">=18" },
+  "bin": {
+    "agentmoat": "bin/moat.js",
+    "moat-shell": "bin/moat-shell.js"
+  },
+  "files": ["bin/", "policy/", "README.md", "LICENSE"],
+  "scripts": {
+    "test": "node bin/moat.js test"
+  }
+}
